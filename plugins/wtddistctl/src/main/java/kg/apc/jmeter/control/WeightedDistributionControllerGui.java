@@ -2,6 +2,8 @@ package kg.apc.jmeter.control;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Enumeration;
 
 import javax.swing.Box;
@@ -13,6 +15,8 @@ import org.apache.jmeter.gui.GuiPackage;
 import org.apache.jmeter.gui.tree.JMeterTreeNode;
 import org.apache.jmeter.gui.util.PowerTableModel;
 import org.apache.jmeter.testelement.TestElement;
+import org.apache.jmeter.testelement.property.JMeterProperty;
+import org.apache.jmeter.testelement.property.TestElementProperty;
 import org.apache.jorphan.collections.Data;
 import org.apache.jorphan.gui.GuiUtils;
 
@@ -52,17 +56,21 @@ public class WeightedDistributionControllerGui
     public void modifyTestElement(TestElement el) {
         GuiUtils.stopTableEditing(table);
         Data model = tableModel.getData();
-        //GuiPackage guiPackage = GuiPackage.getInstance();
         model.reset();
-        if (el instanceof WeightedDistributionController) {
-	        //((WeightedDistributionController) el).removeAllWeightedProbabilites();
+        if (el instanceof WeightedDistributionController && model.size() > 0) {
+        	Collection<JMeterProperty> newWeightedPropColl = new ArrayList<JMeterProperty>(model.size());
+        	
 	        while (model.next()) {
-	            ((WeightedDistributionController) el).putWeightedProbability(
-	            		new WeightedProbability(
-	            				(String) model.getColumnValue(COLUMN_NAMES_1),
-	            				((Boolean)model.getColumnValue(COLUMN_NAMES_0)),
-	            				(Short) model.getColumnValue(COLUMN_NAMES_2)));
+	        
+	        	String newPropName = (String) model.getColumnValue(COLUMN_NAMES_1);
+	        	TestElementProperty newProp = new TestElementProperty(newPropName, new WeightedProbability(
+        				newPropName,
+        				((Boolean)model.getColumnValue(COLUMN_NAMES_0)),
+        				(Short) model.getColumnValue(COLUMN_NAMES_2)));
+	        	newWeightedPropColl.add(newProp);
 	        }
+	        
+	        ((WeightedDistributionController) el).setWeightedProbabilities(newWeightedPropColl);
         }
         this.configureTestElement(el);
     }
@@ -83,7 +91,6 @@ public class WeightedDistributionControllerGui
     public void configure(TestElement el) {
         super.configure(el);
         tableModel.clearData();
-        //GuiPackage guiPackage = GuiPackage.getInstance();
         if (el instanceof WeightedDistributionController && GuiPackage.getInstance().getCurrentElement() == el) {
         	Enumeration<JMeterTreeNode> elNodeEnum = GuiPackage.getInstance().getCurrentNode().children();
         	while(elNodeEnum.hasMoreElements()) {
