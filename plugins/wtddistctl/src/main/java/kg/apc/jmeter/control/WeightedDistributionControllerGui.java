@@ -11,7 +11,6 @@ import javax.swing.ListSelectionModel;
 import org.apache.jmeter.control.gui.AbstractControllerGui;
 import org.apache.jmeter.gui.GuiPackage;
 import org.apache.jmeter.gui.tree.JMeterTreeNode;
-import org.apache.jmeter.gui.util.HeaderAsPropertyRenderer;
 import org.apache.jmeter.gui.util.PowerTableModel;
 import org.apache.jmeter.testelement.TestElement;
 import org.apache.jorphan.collections.Data;
@@ -30,11 +29,11 @@ public class WeightedDistributionControllerGui
 
     private PowerTableModel tableModel;
 	
-    private static final String COLUMN_NAMES_0 = "enable";
+    private static final String COLUMN_NAMES_0 = "Enable";
 
-    private static final String COLUMN_NAMES_1 = "element";
+    private static final String COLUMN_NAMES_1 = "Element Name";
     
-    private static final String COLUMN_NAMES_2 = "weighted";
+    private static final String COLUMN_NAMES_2 = "Weight";
 
     public WeightedDistributionControllerGui() {
     	super();
@@ -114,8 +113,13 @@ public class WeightedDistributionControllerGui
                 new Class[] { Boolean.class, String.class, Short.class });
 
         table = new JTable(tableModel);
-        table.getTableHeader().setDefaultRenderer(new HeaderAsPropertyRenderer());
-        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);;
+        table.getColumn(COLUMN_NAMES_0).setPreferredWidth(100);
+        table.getColumn(COLUMN_NAMES_0).setMaxWidth(100);
+        table.getColumn(COLUMN_NAMES_0).setResizable(false);
+        table.getColumn(COLUMN_NAMES_2).setPreferredWidth(100);
+        table.getColumn(COLUMN_NAMES_2).setMaxWidth(100);
+        table.getColumn(COLUMN_NAMES_2).setResizable(false);
         return makeScrollPane(table);
     }
 
