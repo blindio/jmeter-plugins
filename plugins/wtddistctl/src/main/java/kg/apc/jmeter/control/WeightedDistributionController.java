@@ -58,17 +58,13 @@ public class WeightedDistributionController
 		return prop == null ? null : (WeightedProbability) prop.getObjectValue();
 	}	
 
-	public void putWeightedProbability(WeightedProbability weightedProb) {
+	public void addWeightedProbability(WeightedProbability weightedProb) {
 		TestElementProperty newProp = new TestElementProperty(weightedProb.getName(), weightedProb);
-		int propIndex = getWeightedProbabilityPropertyIndex(weightedProb.getName());
-		if (propIndex != -1) {
-			getWeightedProbabilities().set(propIndex, newProp);
-		} else {
-			if (isRunningVersion()) {
-				setTemporary(newProp);
-			}
-			getWeightedProbabilities().addProperty(newProp);
+
+		if (isRunningVersion()) {
+			setTemporary(newProp);
 		}
+		getWeightedProbabilities().addProperty(newProp);
 	}
 	
 	public PropertyIterator iterator() {
@@ -82,34 +78,12 @@ public class WeightedDistributionController
         PropertyIterator iter = iterator();
         while (iter.hasNext()) {
             WeightedProbability prob = (WeightedProbability) iter.next().getObjectValue();
-            str.append(String.format("%s=%hd(%s)", prob.getName(), prob.getWeight(),  prob.isEnabled() ? "enabled" : "disabled"));
+            str.append(String.format("%s=%d", prob.getName(), prob.getWeight()));
             if (iter.hasNext()) {
                 str.append("&"); //$NON-NLS-1$
             }
         }
         return str.toString();
-    }
-	
-    public void removeWeightedProbability(WeightedProbability weightedProb) {
-    	removeWeightedProbability(weightedProb.getName());
-    }
-
-
-    public void removeWeightedProbability(String weightedProbName) {
-        PropertyIterator iter = getWeightedProbabilities().iterator();
-        while (iter.hasNext()) {
-            WeightedProbability currWeightedProb = (WeightedProbability) iter.next().getObjectValue();
-            if (weightedProbName.equals(currWeightedProb.getName())) {
-                iter.remove();
-            }
-        }
-    }
-    
-    public void removeAllWeightedProbabilites() {
-		CollectionProperty weightedProbs = getWeightedProbabilities();
-		if (weightedProbs != null) {
-			weightedProbs.clear();
-		}
     }
     
     @Override
