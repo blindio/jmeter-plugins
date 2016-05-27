@@ -2,6 +2,7 @@ package kg.apc.jmeter.control;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 import org.apache.jmeter.control.InterleaveControl;
 import org.apache.jmeter.testelement.TestElement;
@@ -20,7 +21,36 @@ public class WeightedDistributionController
 	
 	private int maxCumulativeProbability;
 	
+	private Integer[] chldNodeIdxToSubCtlrIdxMap;
+	
+	
 	public WeightedDistributionController() {
+		setWeightedProbabilities(new ArrayList<JMeterProperty>());
+	}
+	
+	public void setMaxCumulativeProbability(int value) {
+		maxCumulativeProbability = value;
+	}
+	
+	public void addToMaxCumulativeProbability(int value) {
+		maxCumulativeProbability += value;
+	}
+	
+	public void subtractFromMaxCumulativeProbability(int value) {
+		maxCumulativeProbability -= value;
+	}
+	
+	public void resetMaxCumulativeProbability() {
+		setMaxCumulativeProbability(0);
+	}
+	
+	public int getMaxCumulativeProbability() {
+		return maxCumulativeProbability;
+	}
+	
+	public void reset(int childCnt) {
+		chldNodeIdxToSubCtlrIdxMap = new Integer[childCnt];
+		resetMaxCumulativeProbability();
 		setWeightedProbabilities(new ArrayList<JMeterProperty>());
 	}
 	
@@ -32,39 +62,67 @@ public class WeightedDistributionController
 		setProperty(new CollectionProperty(WEIGHTED_PROBABILITIES, weightedProbs));
 	}
 	
-	public int getWeightedProbabilityPropertyIndex(String testElementName) {
-        PropertyIterator iter = getWeightedProbabilities().iterator();
-        int index = 0;
-        CollectionProperty probs = getWeightedProbabilities();
-        if (probs != null) {
-        	while (iter.hasNext()) {
-        		TestElementProperty currProp = (TestElementProperty) iter.next();;
-        		if (testElementName.equals(currProp.getName())) {
-        			return index;
-        		}
-        		index++;
-        	}
-        }
-        return -1;
+	public TestElementProperty getTestElementPropertyBySubControllerIdx(int subCtlrIdx) {
+		return (TestElementProperty)getWeightedProbabilities().get(subCtlrIdx);
 	}
 	
-	public TestElementProperty getWeightedProbabilityProperty(String testElementName) {
-		int index = getWeightedProbabilityPropertyIndex(testElementName);
-		return index == -1 ? null : (TestElementProperty)getWeightedProbabilities().get(index);
+	public WeightedProbability getWeightedProbabilityBySubControllerIdx(int subCtlrIdx) {
+		return (WeightedProbability)getTestElementPropertyBySubControllerIdx(subCtlrIdx).getObjectValue();
+	}	
+	
+	public TestElementProperty getTestElementPropertyByChildNodeIdx(int childNodeIdx) {
+		if (chldNodeIdxToSubCtlrIdxMap != null && chldNodeIdxToSubCtlrIdxMap.length > 0) {
+			Integer subCtlrIdx = chldNodeIdxToSubCtlrIdxMap[childNodeIdx];
+			if (subCtlrIdx != null) {
+				return (TestElementProperty)getWeightedProbabilities().get(subCtlrIdx);
+			}
+		}
+		
+		PropertyIterator iter = getWeightedProbabilities().iterator();
+		while (iter.hasNext()) {
+			TestElementProperty currProp = (TestElementProperty)iter.next();
+			if (((WeightedProbability)currProp.getObjectValue()).getChildNodeIndex() == childNodeIdx) {
+				return currProp;
+			}
+		}
+		
+		return null;
 	}
 	
-	public WeightedProbability getWeightedProbability(String testElementName) {
-		TestElementProperty prop = getWeightedProbabilityProperty(testElementName);
+	public TestElementProperty getTestElementPropertyByChildNodeIdx(int childNodeIdx, String propName) {
+		TestElementProperty prop = getTestElementPropertyByChildNodeIdx(childNodeIdx);
+		if (prop != null && prop.getName().equals(propName)) {
+			return prop;
+		}
+		return null;
+	}
+	
+	public WeightedProbability getWeightedProbabilityByChildNodeIdx(int childNodeIdx) {
+		TestElementProperty prop = getTestElementPropertyByChildNodeIdx(childNodeIdx);
 		return prop == null ? null : (WeightedProbability) prop.getObjectValue();
 	}	
 
+	public WeightedProbability getWeightedProbabilityByChildNodeIdx(int childNodeIdx, String propName) {
+		TestElementProperty prop = getTestElementPropertyByChildNodeIdx(childNodeIdx, propName);
+		return prop == null ? null : (WeightedProbability) prop.getObjectValue();
+	}	
+	
 	public void addWeightedProbability(WeightedProbability weightedProb) {
-		TestElementProperty newProp = new TestElementProperty(weightedProb.getName(), weightedProb);
+		TestElementProperty prop = new TestElementProperty(weightedProb.getName(), weightedProb);
 
 		if (isRunningVersion()) {
-			setTemporary(newProp);
+			setTemporary(prop);
 		}
-		getWeightedProbabilities().addProperty(newProp);
+		
+		if (weightedProb.isElementEnabled()) {
+			addToMaxCumulativeProbability(weightedProb.getWeight());
+		}
+		
+		if (chldNodeIdxToSubCtlrIdxMap != null) {
+			chldNodeIdxToSubCtlrIdxMap[weightedProb.getChildNodeIndex()] = getWeightedProbabilities().size();
+		}
+		
+		getWeightedProbabilities().addProperty(prop);
 	}
 	
 	public PropertyIterator iterator() {
@@ -100,17 +158,16 @@ public class WeightedDistributionController
     private int determineCurrentTestElement () {
     	if (maxCumulativeProbability > 0) {
     		 int currentRandomizer = ThreadLocalRandom.current().nextInt(maxCumulativeProbability);
-    		 int currentElementIndex = 0;
-    		 for (TestElement currElement : this.getSubControllers()) {
-    			 WeightedProbability elementProb = this.getWeightedProbability(currElement.getName());
-    			 if (elementProb != null && elementProb.isEnabled()) {
-    				 if (elementProb.getWeight() >= currentRandomizer) {
-    					 return currentElementIndex;
+    		 List<TestElement> subControllers = getSubControllers();
+    		 for (int elemIdx = 0; elemIdx < subControllers.size(); elemIdx++) {
+    			 WeightedProbability prob = getWeightedProbabilityBySubControllerIdx(elemIdx);
+    			 if (prob != null && prob.isEnabled()) {
+    				 if (prob.getWeight() >= currentRandomizer) {
+    					 return elemIdx;
     				 } else {
-    					 currentRandomizer -= elementProb.getWeight();
+    					 currentRandomizer -= prob.getWeight();
     				 }
     			 }
-    			 currentElementIndex++;
     		 }
     	}
     	return 0;	
