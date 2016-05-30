@@ -29,6 +29,7 @@ import javax.swing.text.NumberFormatter;
 import org.apache.jmeter.control.Controller;
 import org.apache.jmeter.control.gui.AbstractControllerGui;
 import org.apache.jmeter.gui.GuiPackage;
+import org.apache.jmeter.gui.JMeterGUIComponent;
 import org.apache.jmeter.gui.tree.JMeterTreeNode;
 import org.apache.jmeter.gui.util.PowerTableModel;
 import org.apache.jmeter.samplers.Sampler;
@@ -69,26 +70,6 @@ public class WeightedDistributionControllerGui
 	}
     
     @Override
-    public void modifyTestElement(TestElement el) {
-        GuiUtils.stopTableEditing(getTable());
-        Data model = ((PowerTableModel)getTable().getModel()).getData();
-        model.reset();
-        if (el instanceof WeightedDistributionController && model.size() > 0) {
-        	WeightedDistributionController wdc = (WeightedDistributionController) el;
-        	wdc.reset(GuiPackage.getInstance().getCurrentNode().getChildCount());
-	        while (model.next()) {
-	        	WeightedProbability prob = new WeightedProbability((String) model.getColumnValue(ELEMENT_NAME_COLUMN),
-	        					(short) model.getColumnValue(WEIGHT_COLUMN),
-	        					(int) model.getColumnValue(HIDDEN_CHILD_NODE_IDX_COLUMN));
-	        	wdc.addWeightedProbability(prob);
-	        }
-        }
-        this.configureTestElement(el);
-    }
-	
-
-    
-    @Override
     public String getLabelResource()
     {
        return getClass().getName();
@@ -99,37 +80,89 @@ public class WeightedDistributionControllerGui
     {
        return "Weighted Distribution Controller";
     }
+	
+    @Override
+    public void modifyTestElement(TestElement el) {
+        GuiUtils.stopTableEditing(getTable());
+        Data model = ((PowerTableModel)getTable().getModel()).getData();
+        model.reset();
+        if (el instanceof WeightedDistributionController && model.size() > 0) {
+        	WeightedDistributionController wdc = (WeightedDistributionController) el;
+        	if (wdc.buildNodeProbabilityMap()) {
+	        	wdc.reset();
+		        while (model.next()) {
+		        	int childNodeIdx = (int) model.getColumnValue(HIDDEN_CHILD_NODE_IDX_COLUMN);
+		        	TestElement currTestElement = ((JMeterTreeNode)wdc.getNode().getChildAt(childNodeIdx)).getTestElement();
+		        	currTestElement.setProperty(WeightedDistributionController.WEIGHT, (int)model.getColumnValue(WEIGHT_COLUMN));
+		        	currTestElement.setName((String)model.getColumnValue(ELEMENT_NAME_COLUMN));
+		        	currTestElement.setEnabled((boolean)model.getColumnValue(ENABLED_COLUMN));
+		        	//wdc.getWeightedProbabilityForNode((JMeterTreeNode)wdc.getNode().getChildAt(childNodeIdx), childNodeIdx);
+		        	
+		        	/*
+		        	WeightedProbability prob = new WeightedProbability((JMeterTreeNode)wdc.getNode().getChildAt(childNodeIdx),
+		        					childNodeIdx,
+		        					(String) model.getColumnValue(ELEMENT_NAME_COLUMN),
+		        					(short) model.getColumnValue(WEIGHT_COLUMN));
+		        	wdc.addWeightedProbability(prob);
+		        	*/
+		        }
+        	}
+        }
+        this.configureTestElement(el);
+    }
+	
+
+    
+
 
     @Override
     public void configure(TestElement el) {
         super.configure(el);
         ((PowerTableModel)getTable().getModel()).clearData();
-        if (el instanceof WeightedDistributionController && GuiPackage.getInstance().getCurrentElement() == el) {
-        	JMeterTreeNode currNode = GuiPackage.getInstance().getCurrentNode();
+        if (el instanceof WeightedDistributionController) {
         	WeightedDistributionController wdc = (WeightedDistributionController) el;
-        	for (int childNodeIdx = 0; childNodeIdx < currNode.getChildCount(); childNodeIdx++) {
-        		TestElement currTestElement = ((JMeterTreeNode)currNode.getChildAt(childNodeIdx)).getTestElement();
-        		if (currTestElement instanceof Controller || currTestElement instanceof Sampler) {
-	        		WeightedProbability currProb = wdc.getWeightedProbabilityByChildNodeIdx(childNodeIdx, currTestElement.getName());
-	        		if (currProb == null) {
-	        			currProb = new WeightedProbability(currTestElement.getName(), childNodeIdx);
-	        			wdc.addWeightedProbability(currProb);
+        	if (wdc.buildNodeProbabilityMap()) {
+	        	for (int childNodeIdx = 0; childNodeIdx < wdc.getNode().getChildCount(); childNodeIdx++) {
+	        		JMeterTreeNode currNode = (JMeterTreeNode)wdc.getNode().getChildAt(childNodeIdx);
+	        		TestElement currTestElement = currNode.getTestElement();
+	        		if (currTestElement instanceof Controller || currTestElement instanceof Sampler) {
+	        			((PowerTableModel)getTable().getModel()).addRow(
+		        				new Object[] {
+		        						currTestElement.isEnabled(),
+		        						currTestElement.getName(),
+		        						currTestElement.getPropertyAsInt(WeightedDistributionController.WEIGHT, WeightedDistributionController.DFLT_WEIGHT),
+		        						0.0,
+		        						childNodeIdx 
+		        				});
+	        			//WeightedProbability currProb = wdc.getWeightedProbabilityForNode(currChildNode, childNodeIdx);
+	        			/*
+		        		WeightedProbability currProb = wdc.getWeightedProbabilityByChildNodeIdx(childNodeIdx, currChildNodeTestElement.getName());
+		        		if (currProb == null) {
+		        			currProb = new WeightedProbability(currChildNode, childNodeIdx, currChildNodeTestElement.getName());
+		        			wdc.addWeightedProbability(currProb);
+		        		}
+		        		
+		        		((PowerTableModel)getTable().getModel()).addRow(
+		        				new Object[] { 
+		        						currChildNodeTestElement.isEnabled(),
+		        						currChildNodeTestElement.getName(),
+		        						currProb.getWeight(),
+		        						getPercentage(currProb, wdc),
+		        						childNodeIdx 
+		        				});
+		        				*/
 	        		}
-	        		((PowerTableModel)getTable().getModel()).addRow(
-	        				new Object[] { 
-	        						currTestElement.isEnabled(),
-	        						currTestElement.getName(),
-	        						currProb.getWeight(),
-	        						getPercentage(currProb, wdc),
-	        						childNodeIdx 
-	        				});
-        		}
-        	}
+	        	}
+	        }
         }
     }
  
+    public void updatePercentageColumn() {
+    	
+    }
+    
     private float getPercentage(WeightedProbability prob, WeightedDistributionController wdc) {
-    	if (prob.isElementEnabled()  && wdc.getMaxCumulativeProbability() > 0) {
+    	if (prob.isElementEnabled() == true  && wdc.getMaxCumulativeProbability() > 0) {
     		 return ((float)prob.getWeight()) / wdc.getMaxCumulativeProbability();
     	}
     	return 0.0f;
@@ -161,7 +194,7 @@ public class WeightedDistributionControllerGui
 	private Component createTablePanel() {
         TableModel tableModel = new EventFiringPowerTableModel(
                 COLUMN_NAMES,
-                new Class[] { Boolean.class, String.class, Short.class, Float.class, Integer.class })
+                new Class[] { Boolean.class, String.class, Integer.class, Float.class, Integer.class })
 		        {
 		        	@Override
 		        	public boolean isCellEditable(int row, int column) {
@@ -190,6 +223,10 @@ public class WeightedDistributionControllerGui
         table.getModel().addTableModelListener(new WeightedDistributionTableModelListener());
         return makeScrollPane(table);
     }
+    
+    public static boolean isCurrentNodeWeightedDistributionNode() {
+    	return GuiPackage.getInstance().getCurrentElement() instanceof WeightedDistributionController;
+    }
 }
 
 class WeightedDistributionTableModelListener implements TableModelListener {	
@@ -216,19 +253,13 @@ class WeightedDistributionTableModelListener implements TableModelListener {
 		    EventFiringPowerTableModel firingModel = (EventFiringPowerTableModel) e.getSource();
 			Object[] rowData = firingModel.getRowData(e.getFirstRow());
 			boolean isEnabled = (boolean)rowData[WeightedDistributionControllerGui.ENABLED_COLUMN];
-			JMeterTreeNode currNode = GuiPackage.getInstance().getCurrentNode();
-			((JMeterTreeNode)currNode.getChildAt((int)rowData[WeightedDistributionControllerGui.HIDDEN_CHILD_NODE_IDX_COLUMN]))
-						.setEnabled(isEnabled);
-			short wgt = (short)rowData[WeightedDistributionControllerGui.WEIGHT_COLUMN];
-			
-			WeightedDistributionController wdc = (WeightedDistributionController)currNode.getTestElement();
-			if (isEnabled) {
-				wdc.addToMaxCumulativeProbability(wgt);
-			} else {
-				wdc.subtractFromMaxCumulativeProbability(wgt);
+			if (WeightedDistributionControllerGui.isCurrentNodeWeightedDistributionNode()) {
+				WeightedDistributionController wdc = (WeightedDistributionController)GuiPackage.getInstance().getCurrentElement();
+				wdc.buildNodeProbabilityMap();
+				((JMeterTreeNode)wdc.getNode().getChildAt((int)rowData[WeightedDistributionControllerGui.HIDDEN_CHILD_NODE_IDX_COLUMN]))
+							.setEnabled(isEnabled);
+				GuiPackage.getInstance().getMainFrame().repaint();
 			}
-			
-			GuiPackage.getInstance().getMainFrame().repaint();
 		}
 	}
 	
@@ -297,10 +328,10 @@ class UnsignedShortEditor extends DefaultCellEditor {
 		super(new JFormattedTextField());
 		ftf = (JFormattedTextField)getComponent();
 		NumberFormatter ushortFormatter = new NumberFormatter(intFormat);
-		ushortFormatter.setMinimum((short)0);
-		ushortFormatter.setMaximum(Short.MAX_VALUE);
+		ushortFormatter.setMinimum(0);
+		ushortFormatter.setMaximum(9999);
 		ftf.setFormatterFactory(new DefaultFormatterFactory(ushortFormatter));
-		ftf.setValue((short)0);
+		ftf.setValue(0);
 		ftf.setHorizontalAlignment(JTextField.TRAILING);
 		ftf.setFocusLostBehavior(JFormattedTextField.PERSIST);
 		
@@ -344,10 +375,10 @@ class UnsignedShortEditor extends DefaultCellEditor {
     public Object getCellEditorValue() {
         JFormattedTextField ftf = (JFormattedTextField)getComponent();
         Object o = ftf.getValue();
-        if (o instanceof Short) {
+        if (o instanceof Integer) {
             return o;
         } else if (o instanceof Number) {
-            return new Short(((Number)o).shortValue());
+            return new Integer(((Number)o).intValue());
         } else {
             if (DEBUG) {
                 System.out.println("getCellEditorValue: o isn't a Number");

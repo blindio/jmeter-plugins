@@ -2,9 +2,13 @@ package kg.apc.jmeter.control;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.jmeter.control.InterleaveControl;
+import org.apache.jmeter.gui.GuiPackage;
+import org.apache.jmeter.gui.tree.JMeterTreeNode;
 import org.apache.jmeter.testelement.TestElement;
 import org.apache.jmeter.testelement.property.CollectionProperty;
 import org.apache.jmeter.testelement.property.JMeterProperty;
@@ -21,11 +25,69 @@ public class WeightedDistributionController
 	
 	private int maxCumulativeProbability;
 	
-	private Integer[] chldNodeIdxToSubCtlrIdxMap;
+	private transient Map<JMeterTreeNode, WeightedProbability> nodeToProbMap;
 	
+	//private Integer[] chldNodeIdxToSubCtlrIdxMap;
+	
+	private transient JMeterTreeNode node;
+
+	public static final int DFLT_WEIGHT = 0;
+
+	/** Weight of Test Element in probability as a short **/
+	public static final String WEIGHT = "WeightedProbability.weight";
 	
 	public WeightedDistributionController() {
 		setWeightedProbabilities(new ArrayList<JMeterProperty>());
+		nodeToProbMap = null;
+		node = null;
+	}
+	
+	
+	
+	public JMeterTreeNode getNode() {
+		return node;
+	}
+	
+	public WeightedProbability getWeightedProbabilityForNode(JMeterTreeNode node, int childNodeIdx) {
+		WeightedProbability prob = nodeToProbMap.get(node);
+		if (prob == null) {
+			prob = new WeightedProbability(node, childNodeIdx);
+			addWeightedProbability(prob);
+		} else {
+			if (!prob.getName().equals(node.getName())) {
+				prob.setName(node.getName());
+			}
+			
+			if (!(prob.getChildNodeIndex() == childNodeIdx)) {
+				prob.setChildNodeIndex(childNodeIdx);
+			}
+		}
+		
+		return prob;
+	}
+	
+	public boolean buildNodeProbabilityMap() {
+		JMeterTreeNode wdcNode = GuiPackage.getInstance().getNodeOf(this);
+		if (node == null && wdcNode != null) {
+			node = wdcNode;
+			nodeToProbMap = new HashMap<JMeterTreeNode, WeightedProbability>();
+			PropertyIterator iter = iterator();
+			while(iter.hasNext()) {
+				WeightedProbability currProb = (WeightedProbability)((TestElementProperty)iter.next()).getObjectValue();
+				
+				try {
+					JMeterTreeNode currNode = (JMeterTreeNode)node.getChildAt(currProb.getChildNodeIndex());
+					if (currNode.getName().equals(currProb.getName())) {
+						currProb.setNode(currNode);
+						nodeToProbMap.put(currNode, currProb);
+					}
+				} catch (IndexOutOfBoundsException e) {
+					
+				}
+				
+			}
+		}
+		return node != null;
 	}
 	
 	public void setMaxCumulativeProbability(int value) {
@@ -48,8 +110,12 @@ public class WeightedDistributionController
 		return maxCumulativeProbability;
 	}
 	
-	public void reset(int childCnt) {
-		chldNodeIdxToSubCtlrIdxMap = new Integer[childCnt];
+	public void reset() {
+		/*
+		if (getNode() != null) {
+			chldNodeIdxToSubCtlrIdxMap = new Integer[getNode().getChildCount()];
+		}
+		*/
 		resetMaxCumulativeProbability();
 		setWeightedProbabilities(new ArrayList<JMeterProperty>());
 	}
@@ -70,6 +136,7 @@ public class WeightedDistributionController
 		return (WeightedProbability)getTestElementPropertyBySubControllerIdx(subCtlrIdx).getObjectValue();
 	}	
 	
+	/*
 	public TestElementProperty getTestElementPropertyByChildNodeIdx(int childNodeIdx) {
 		if (chldNodeIdxToSubCtlrIdxMap != null && chldNodeIdxToSubCtlrIdxMap.length > 0) {
 			Integer subCtlrIdx = chldNodeIdxToSubCtlrIdxMap[childNodeIdx];
@@ -106,6 +173,7 @@ public class WeightedDistributionController
 		TestElementProperty prop = getTestElementPropertyByChildNodeIdx(childNodeIdx, propName);
 		return prop == null ? null : (WeightedProbability) prop.getObjectValue();
 	}	
+	*/
 	
 	public void addWeightedProbability(WeightedProbability weightedProb) {
 		TestElementProperty prop = new TestElementProperty(weightedProb.getName(), weightedProb);
@@ -114,13 +182,15 @@ public class WeightedDistributionController
 			setTemporary(prop);
 		}
 		
-		if (weightedProb.isElementEnabled()) {
+		if (weightedProb.isElementEnabled() == true) {
 			addToMaxCumulativeProbability(weightedProb.getWeight());
 		}
 		
+		/*
 		if (chldNodeIdxToSubCtlrIdxMap != null) {
 			chldNodeIdxToSubCtlrIdxMap[weightedProb.getChildNodeIndex()] = getWeightedProbabilities().size();
 		}
+		*/
 		
 		getWeightedProbabilities().addProperty(prop);
 	}
